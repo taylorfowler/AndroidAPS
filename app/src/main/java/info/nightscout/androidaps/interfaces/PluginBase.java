@@ -8,22 +8,27 @@ import java.util.Date;
 public interface PluginBase {
     int GENERAL = 1;
     int TREATMENT = 2;
-    int TEMPBASAL = 3;
+    int SENSITIVITY = 3;
     int PROFILE = 4;
     int APS = 5;
     int PUMP = 6;
     int CONSTRAINTS = 7;
     int LOOP = 8;
     int BGSOURCE = 9;
-    int LAST = 10; // keep always highest number
+    int INSULIN = 10;
+    int LAST = 11; // keep always highest number
 
     int getType();
     String getFragmentClass();
 
     String getName();
+    String getNameShort();
     boolean isEnabled(int type);
     boolean isVisibleInTabs(int type);
     boolean canBeHidden(int type);
+    boolean hasFragment();
+    boolean showInList(int type);
     void setFragmentEnabled(int type, boolean fragmentEnabled);
     void setFragmentVisible(int type, boolean fragmentVisible);
+    int getPreferencesId();
 }

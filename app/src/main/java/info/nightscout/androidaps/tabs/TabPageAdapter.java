@@ -1,13 +1,20 @@
 package info.nightscout.androidaps.tabs;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.preference.PreferenceManager;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v4.app.FragmentStatePagerAdapter;
+import android.view.ViewGroup;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 
+import info.nightscout.androidaps.MainActivity;
 import info.nightscout.androidaps.interfaces.PluginBase;
 
 /**
@@ -15,15 +22,14 @@ import info.nightscout.androidaps.interfaces.PluginBase;
  */
 public class TabPageAdapter extends FragmentStatePagerAdapter {
 
-    ArrayList<PluginBase> fragmentList = new ArrayList<>();
     ArrayList<PluginBase> visibleFragmentList = new ArrayList<>();
 
-    FragmentManager fm;
     Context context;
+
+    private static Logger log = LoggerFactory.getLogger(TabPageAdapter.class);
 
     public TabPageAdapter(FragmentManager fm, Context context) {
         super(fm);
-        this.fm = fm;
         this.context = context;
     }
 
@@ -35,8 +41,24 @@ public class TabPageAdapter extends FragmentStatePagerAdapter {
     }
 
     @Override
+    public void finishUpdate(ViewGroup container) {
+        try{
+            super.finishUpdate(container);
+        } catch (NullPointerException nullPointerException){
+            System.out.println("Catch the NullPointerException in FragmentStatePagerAdapter.finishUpdate");
+        } catch (IllegalStateException e){
+            log.error(e.getMessage());
+        }
+    }
+
+    @Override
     public CharSequence getPageTitle(int position) {
+        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        if(preferences.getBoolean("short_tabtitles", false)){
+            return visibleFragmentList.get(position).getNameShort();
+        }
         return visibleFragmentList.get(position).getName();
+
     }
 
     @Override
@@ -45,10 +67,11 @@ public class TabPageAdapter extends FragmentStatePagerAdapter {
     }
 
     public void registerNewFragment(PluginBase plugin) {
-        fragmentList.add(plugin);
-        if (plugin.isVisibleInTabs(plugin.getType())) {
+        if (plugin.hasFragment() && plugin.isVisibleInTabs(plugin.getType())) {
             visibleFragmentList.add(plugin);
             notifyDataSetChanged();
         }
     }
+
+
 }

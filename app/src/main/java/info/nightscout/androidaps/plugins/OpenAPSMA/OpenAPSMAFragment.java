@@ -9,6 +9,9 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.TextView;
 
+import com.crashlytics.android.Crashlytics;
+import com.crashlytics.android.answers.Answers;
+import com.crashlytics.android.answers.CustomEvent;
 import com.squareup.otto.Subscribe;
 
 import org.slf4j.Logger;
@@ -16,23 +19,13 @@ import org.slf4j.LoggerFactory;
 
 import info.nightscout.androidaps.MainApp;
 import info.nightscout.androidaps.R;
-import info.nightscout.androidaps.interfaces.FragmentBase;
-import info.nightscout.androidaps.plugins.Loop.APSResult;
-import info.nightscout.androidaps.plugins.OpenAPSMA.events.EventOpenAPSMAUpdateGui;
-import info.nightscout.androidaps.plugins.OpenAPSMA.events.EventOpenAPSMAUpdateResultGui;
+import info.nightscout.androidaps.plugins.Common.SubscriberFragment;
+import info.nightscout.androidaps.plugins.OpenAPSMA.events.EventOpenAPSUpdateGui;
+import info.nightscout.androidaps.plugins.OpenAPSMA.events.EventOpenAPSUpdateResultGui;
 import info.nightscout.utils.JSONFormatter;
 
-public class OpenAPSMAFragment extends Fragment implements View.OnClickListener, FragmentBase {
+public class OpenAPSMAFragment extends SubscriberFragment implements View.OnClickListener {
     private static Logger log = LoggerFactory.getLogger(OpenAPSMAFragment.class);
-
-    private static OpenAPSMAPlugin openAPSMAPlugin;
-
-    public static OpenAPSMAPlugin getPlugin() {
-        if(openAPSMAPlugin==null){
-            openAPSMAPlugin = new OpenAPSMAPlugin();
-        }
-        return openAPSMAPlugin;
-    }
 
     Button run;
     TextView lastRunView;
@@ -47,82 +40,78 @@ public class OpenAPSMAFragment extends Fragment implements View.OnClickListener,
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.openapsma_fragment, container, false);
+        try {
+            View view = inflater.inflate(R.layout.openapsma_fragment, container, false);
 
-        run = (Button) view.findViewById(R.id.openapsma_run);
-        run.setOnClickListener(this);
-        lastRunView = (TextView) view.findViewById(R.id.openapsma_lastrun);
-        glucoseStatusView = (TextView) view.findViewById(R.id.openapsma_glucosestatus);
-        currentTempView = (TextView) view.findViewById(R.id.openapsma_currenttemp);
-        iobDataView = (TextView) view.findViewById(R.id.openapsma_iobdata);
-        profileView = (TextView) view.findViewById(R.id.openapsma_profile);
-        mealDataView = (TextView) view.findViewById(R.id.openapsma_mealdata);
-        resultView = (TextView) view.findViewById(R.id.openapsma_result);
-        requestView = (TextView) view.findViewById(R.id.openapsma_request);
+            run = (Button) view.findViewById(R.id.openapsma_run);
+            run.setOnClickListener(this);
+            lastRunView = (TextView) view.findViewById(R.id.openapsma_lastrun);
+            glucoseStatusView = (TextView) view.findViewById(R.id.openapsma_glucosestatus);
+            currentTempView = (TextView) view.findViewById(R.id.openapsma_currenttemp);
+            iobDataView = (TextView) view.findViewById(R.id.openapsma_iobdata);
+            profileView = (TextView) view.findViewById(R.id.openapsma_profile);
+            mealDataView = (TextView) view.findViewById(R.id.openapsma_mealdata);
+            resultView = (TextView) view.findViewById(R.id.openapsma_result);
+            requestView = (TextView) view.findViewById(R.id.openapsma_request);
 
-        updateGUI();
-        return view;
+            updateGUI();
+            return view;
+        } catch (Exception e) {
+            Crashlytics.logException(e);
+        }
+
+        return null;
     }
 
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.openapsma_run:
-                getPlugin().invoke();
+                OpenAPSMAPlugin.getPlugin().invoke("OpenAPSMA button");
+                Answers.getInstance().logCustom(new CustomEvent("OpenAPS_MA_Run"));
                 break;
         }
 
     }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        MainApp.bus().unregister(this);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        MainApp.bus().register(this);
-    }
-
     @Subscribe
-    public void onStatusEvent(final EventOpenAPSMAUpdateGui ev) {
+    public void onStatusEvent(final EventOpenAPSUpdateGui ev) {
         updateGUI();
     }
 
     @Subscribe
-    public void onStatusEvent(final EventOpenAPSMAUpdateResultGui ev) {
+    public void onStatusEvent(final EventOpenAPSUpdateResultGui ev) {
         updateResultGUI(ev.text);
     }
 
-    void updateGUI() {
+    @Override
+    protected void updateGUI() {
         Activity activity = getActivity();
         if (activity != null)
             activity.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    DetermineBasalResult lastAPSResult = getPlugin().lastAPSResult;
+                    DetermineBasalResultMA lastAPSResult = OpenAPSMAPlugin.getPlugin().lastAPSResult;
                     if (lastAPSResult != null) {
                         resultView.setText(JSONFormatter.format(lastAPSResult.json));
                         requestView.setText(lastAPSResult.toSpanned());
                     }
-                    DetermineBasalAdapterJS determineBasalAdapterJS = getPlugin().lastDetermineBasalAdapterJS;
-                    if (determineBasalAdapterJS != null) {
-                        glucoseStatusView.setText(JSONFormatter.format(determineBasalAdapterJS.getGlucoseStatusParam()));
-                        currentTempView.setText(JSONFormatter.format(determineBasalAdapterJS.getCurrentTempParam()));
-                        iobDataView.setText(JSONFormatter.format(determineBasalAdapterJS.getIobDataParam()));
-                        profileView.setText(JSONFormatter.format(determineBasalAdapterJS.getProfileParam()));
-                        mealDataView.setText(JSONFormatter.format(determineBasalAdapterJS.getMealDataParam()));
+                    DetermineBasalAdapterMAJS determineBasalAdapterMAJS = OpenAPSMAPlugin.getPlugin().lastDetermineBasalAdapterMAJS;
+                    if (determineBasalAdapterMAJS != null) {
+                        glucoseStatusView.setText(JSONFormatter.format(determineBasalAdapterMAJS.getGlucoseStatusParam()));
+                        currentTempView.setText(JSONFormatter.format(determineBasalAdapterMAJS.getCurrentTempParam()));
+                        iobDataView.setText(JSONFormatter.format(determineBasalAdapterMAJS.getIobDataParam()));
+                        profileView.setText(JSONFormatter.format(determineBasalAdapterMAJS.getProfileParam()));
+                        mealDataView.setText(JSONFormatter.format(determineBasalAdapterMAJS.getMealDataParam()));
                     }
-                    if (getPlugin().lastAPSRun != null) {
-                        lastRunView.setText(getPlugin().lastAPSRun.toLocaleString());
+                    if (OpenAPSMAPlugin.getPlugin().lastAPSRun != null) {
+                        lastRunView.setText(OpenAPSMAPlugin.getPlugin().lastAPSRun.toLocaleString());
                     }
                 }
             });
     }
 
-    void updateResultGUI(final String text) {
+    private void updateResultGUI(final String text) {
         Activity activity = getActivity();
         if (activity != null)
             activity.runOnUiThread(new Runnable() {

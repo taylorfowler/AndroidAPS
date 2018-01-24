@@ -2,35 +2,48 @@ package info.nightscout.androidaps.plugins.ConfigBuilder;
 
 
 import android.content.Context;
-import android.graphics.Color;
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.v4.app.Fragment;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.CheckBox;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.ListAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 
+import com.crashlytics.android.Crashlytics;
+import com.crashlytics.android.answers.Answers;
+import com.crashlytics.android.answers.CustomEvent;
+
 import java.util.ArrayList;
 
 import info.nightscout.androidaps.MainApp;
+import info.nightscout.androidaps.PreferencesActivity;
 import info.nightscout.androidaps.R;
+import info.nightscout.androidaps.events.EventConfigBuilderChange;
 import info.nightscout.androidaps.events.EventRefreshGui;
 import info.nightscout.androidaps.interfaces.APSInterface;
 import info.nightscout.androidaps.interfaces.BgSourceInterface;
 import info.nightscout.androidaps.interfaces.ConstraintsInterface;
-import info.nightscout.androidaps.interfaces.FragmentBase;
+import info.nightscout.androidaps.interfaces.InsulinInterface;
 import info.nightscout.androidaps.interfaces.PluginBase;
 import info.nightscout.androidaps.interfaces.ProfileInterface;
 import info.nightscout.androidaps.interfaces.PumpInterface;
-import info.nightscout.androidaps.plugins.NSProfile.NSProfilePlugin;
-import info.nightscout.androidaps.plugins.VirtualPump.VirtualPumpPlugin;
+import info.nightscout.androidaps.interfaces.SensitivityInterface;
+import info.nightscout.androidaps.plugins.Insulin.InsulinFastactingPlugin;
+import info.nightscout.androidaps.plugins.ProfileNS.NSProfilePlugin;
+import info.nightscout.androidaps.plugins.PumpVirtual.VirtualPumpPlugin;
+import info.nightscout.androidaps.plugins.SensitivityOref0.SensitivityOref0Plugin;
+import info.nightscout.utils.PasswordProtection;
 
 
-public class ConfigBuilderFragment extends Fragment implements FragmentBase {
+public class ConfigBuilderFragment extends Fragment {
 
     static ConfigBuilderPlugin configBuilderPlugin = new ConfigBuilderPlugin();
 
@@ -38,91 +51,135 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
         return configBuilderPlugin;
     }
 
+    ListView insulinListView;
+    ListView sensitivityListView;
     ListView bgsourceListView;
+    TextView bgsourceLabel;
     ListView pumpListView;
+    TextView pumpLabel;
     ListView loopListView;
     TextView loopLabel;
     ListView treatmentsListView;
-    ListView tempsListView;
+    TextView treatmentsLabel;
     ListView profileListView;
+    TextView profileLabel;
     ListView apsListView;
     TextView apsLabel;
     ListView constraintsListView;
+    TextView constraintsLabel;
     ListView generalListView;
-    TextView nsclientVerView;
-    TextView nightscoutVerView;
 
+    LinearLayout mainLayout;
+    Button unlock;
+
+    PluginCustomAdapter insulinDataAdapter = null;
+    PluginCustomAdapter sensivityDataAdapter = null;
     PluginCustomAdapter bgsourceDataAdapter = null;
     PluginCustomAdapter pumpDataAdapter = null;
     PluginCustomAdapter loopDataAdapter = null;
-    PluginCustomAdapter treatmentsDataAdapter = null;
-    PluginCustomAdapter tempsDataAdapter = null;
+    PluginCustomAdapter treatmentDataAdapter = null;
     PluginCustomAdapter profileDataAdapter = null;
     PluginCustomAdapter apsDataAdapter = null;
     PluginCustomAdapter constraintsDataAdapter = null;
     PluginCustomAdapter generalDataAdapter = null;
 
-
-    // TODO: sorting
-    // TODO: Toast and sound when command failed
-
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.configbuilder_fragment, container, false);
-        bgsourceListView = (ListView) view.findViewById(R.id.configbuilder_bgsourcelistview);
-        pumpListView = (ListView) view.findViewById(R.id.configbuilder_pumplistview);
-        loopListView = (ListView) view.findViewById(R.id.configbuilder_looplistview);
-        loopLabel = (TextView) view.findViewById(R.id.configbuilder_looplabel);
-        treatmentsListView = (ListView) view.findViewById(R.id.configbuilder_treatmentslistview);
-        tempsListView = (ListView) view.findViewById(R.id.configbuilder_tempslistview);
-        profileListView = (ListView) view.findViewById(R.id.configbuilder_profilelistview);
-        apsListView = (ListView) view.findViewById(R.id.configbuilder_apslistview);
-        apsLabel = (TextView) view.findViewById(R.id.configbuilder_apslabel);
-        constraintsListView = (ListView) view.findViewById(R.id.configbuilder_constraintslistview);
-        generalListView = (ListView) view.findViewById(R.id.configbuilder_generallistview);
-        nsclientVerView = (TextView) view.findViewById(R.id.configbuilder_nsclientversion);
-        nightscoutVerView = (TextView) view.findViewById(R.id.configbuilder_nightscoutversion);
+        try {
+            View view = inflater.inflate(R.layout.configbuilder_fragment, container, false);
 
-        nsclientVerView.setText(ConfigBuilderPlugin.nsClientVersionName);
-        nightscoutVerView.setText(ConfigBuilderPlugin.nightscoutVersionName);
-        if (ConfigBuilderPlugin.nsClientVersionCode < 117) nsclientVerView.setTextColor(Color.RED);
-        if (ConfigBuilderPlugin.nightscoutVersionCode < 900)
-            nightscoutVerView.setTextColor(Color.RED);
-        setViews();
-        return view;
+            insulinListView = (ListView) view.findViewById(R.id.configbuilder_insulinlistview);
+            sensitivityListView = (ListView) view.findViewById(R.id.configbuilder_sensitivitylistview);
+            bgsourceListView = (ListView) view.findViewById(R.id.configbuilder_bgsourcelistview);
+            bgsourceLabel = (TextView) view.findViewById(R.id.configbuilder_bgsourcelabel);
+            pumpListView = (ListView) view.findViewById(R.id.configbuilder_pumplistview);
+            pumpLabel = (TextView) view.findViewById(R.id.configbuilder_pumplabel);
+            loopListView = (ListView) view.findViewById(R.id.configbuilder_looplistview);
+            loopLabel = (TextView) view.findViewById(R.id.configbuilder_looplabel);
+            treatmentsListView = (ListView) view.findViewById(R.id.configbuilder_treatmentslistview);
+            treatmentsLabel = (TextView) view.findViewById(R.id.configbuilder_treatmentslabel);
+            profileListView = (ListView) view.findViewById(R.id.configbuilder_profilelistview);
+            profileLabel = (TextView) view.findViewById(R.id.configbuilder_profilelabel);
+            apsListView = (ListView) view.findViewById(R.id.configbuilder_apslistview);
+            apsLabel = (TextView) view.findViewById(R.id.configbuilder_apslabel);
+            constraintsListView = (ListView) view.findViewById(R.id.configbuilder_constraintslistview);
+            constraintsLabel = (TextView) view.findViewById(R.id.configbuilder_constraintslabel);
+            generalListView = (ListView) view.findViewById(R.id.configbuilder_generallistview);
+
+            mainLayout = (LinearLayout) view.findViewById(R.id.configbuilder_mainlayout);
+            unlock = (Button) view.findViewById(R.id.configbuilder_unlock);
+
+            setViews();
+
+            if (PasswordProtection.isLocked("settings_password")) {
+                mainLayout.setVisibility(View.GONE);
+                unlock.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        PasswordProtection.QueryPassword(getContext(), R.string.settings_password, "settings_password", new Runnable() {
+                            @Override
+                            public void run() {
+                                mainLayout.setVisibility(View.VISIBLE);
+                                unlock.setVisibility(View.GONE);
+                            }
+                        }, null);
+                    }
+                });
+            } else {
+                unlock.setVisibility(View.GONE);
+            }
+            return view;
+        } catch (Exception e) {
+            Crashlytics.logException(e);
+        }
+
+        return null;
     }
 
     void setViews() {
-        bgsourceDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsListByInterface(BgSourceInterface.class), PluginBase.BGSOURCE);
+        insulinDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInListByInterface(InsulinInterface.class, PluginBase.INSULIN), PluginBase.INSULIN);
+        insulinListView.setAdapter(insulinDataAdapter);
+        setListViewHeightBasedOnChildren(insulinListView);
+        bgsourceDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInListByInterface(BgSourceInterface.class, PluginBase.BGSOURCE), PluginBase.BGSOURCE);
         bgsourceListView.setAdapter(bgsourceDataAdapter);
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.BGSOURCE).size() == 0)
+            bgsourceLabel.setVisibility(View.GONE);
         setListViewHeightBasedOnChildren(bgsourceListView);
-        pumpDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.PUMP), PluginBase.PUMP);
+        pumpDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInList(PluginBase.PUMP), PluginBase.PUMP);
         pumpListView.setAdapter(pumpDataAdapter);
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.PUMP).size() == 0)
+            pumpLabel.setVisibility(View.GONE);
         setListViewHeightBasedOnChildren(pumpListView);
-        loopDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.LOOP), PluginBase.LOOP);
+        loopDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInList(PluginBase.LOOP), PluginBase.LOOP);
         loopListView.setAdapter(loopDataAdapter);
         setListViewHeightBasedOnChildren(loopListView);
-        if (MainApp.getSpecificPluginsList(PluginBase.LOOP).size() == 0)
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.LOOP).size() == 0)
             loopLabel.setVisibility(View.GONE);
-        treatmentsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.TREATMENT), PluginBase.TREATMENT);
-        treatmentsListView.setAdapter(treatmentsDataAdapter);
+        treatmentDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInList(PluginBase.TREATMENT), PluginBase.TREATMENT);
+        treatmentsListView.setAdapter(treatmentDataAdapter);
         setListViewHeightBasedOnChildren(treatmentsListView);
-        tempsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.TEMPBASAL), PluginBase.TEMPBASAL);
-        tempsListView.setAdapter(tempsDataAdapter);
-        setListViewHeightBasedOnChildren(tempsListView);
-        profileDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsListByInterface(ProfileInterface.class), PluginBase.PROFILE);
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.TREATMENT).size() == 0)
+            treatmentsLabel.setVisibility(View.GONE);
+        profileDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInListByInterface(ProfileInterface.class, PluginBase.PROFILE), PluginBase.PROFILE);
         profileListView.setAdapter(profileDataAdapter);
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.PROFILE).size() == 0)
+            profileLabel.setVisibility(View.GONE);
         setListViewHeightBasedOnChildren(profileListView);
-        apsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.APS), PluginBase.APS);
+        apsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInList(PluginBase.APS), PluginBase.APS);
         apsListView.setAdapter(apsDataAdapter);
         setListViewHeightBasedOnChildren(apsListView);
-        if (MainApp.getSpecificPluginsList(PluginBase.APS).size() == 0)
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.APS).size() == 0)
             apsLabel.setVisibility(View.GONE);
-        constraintsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsListByInterface(ConstraintsInterface.class), PluginBase.CONSTRAINTS);
+        sensivityDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInListByInterface(SensitivityInterface.class, PluginBase.SENSITIVITY), PluginBase.SENSITIVITY);
+        sensitivityListView.setAdapter(sensivityDataAdapter);
+        setListViewHeightBasedOnChildren(sensitivityListView);
+        constraintsDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInListByInterface(ConstraintsInterface.class, PluginBase.CONSTRAINTS), PluginBase.CONSTRAINTS);
         constraintsListView.setAdapter(constraintsDataAdapter);
         setListViewHeightBasedOnChildren(constraintsListView);
-        generalDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsList(PluginBase.GENERAL), PluginBase.GENERAL);
+        if (MainApp.getSpecificPluginsVisibleInList(PluginBase.CONSTRAINTS).size() == 0)
+            constraintsLabel.setVisibility(View.GONE);
+        generalDataAdapter = new PluginCustomAdapter(getContext(), R.layout.configbuilder_simpleitem, MainApp.getSpecificPluginsVisibleInList(PluginBase.GENERAL), PluginBase.GENERAL);
         generalListView.setAdapter(generalDataAdapter);
         setListViewHeightBasedOnChildren(generalListView);
 
@@ -140,7 +197,7 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
         public PluginCustomAdapter(Context context, int textViewResourceId,
                                    ArrayList<PluginBase> pluginList, int type) {
             super(context, textViewResourceId, pluginList);
-            this.pluginList = new ArrayList<PluginBase>();
+            this.pluginList = new ArrayList<>();
             this.pluginList.addAll(pluginList);
             this.type = type;
         }
@@ -149,21 +206,30 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
             TextView name;
             CheckBox checkboxEnabled;
             CheckBox checkboxVisible;
+            ImageView settings;
         }
 
         @Override
-        public View getView(int position, View convertView, ViewGroup parent) {
+        public View getView(int position, View view, ViewGroup parent) {
 
             PluginViewHolder holder = null;
+            PluginBase plugin = pluginList.get(position);
 
-            if (convertView == null) {
-                convertView = LayoutInflater.from(parent.getContext()).inflate(R.layout.configbuilder_simpleitem, null);
+            if (view == null) {
+                view = LayoutInflater.from(parent.getContext()).inflate(R.layout.configbuilder_simpleitem, null);
 
                 holder = new PluginViewHolder();
-                holder.name = (TextView) convertView.findViewById(R.id.configbuilder_simpleitem_name);
-                holder.checkboxEnabled = (CheckBox) convertView.findViewById(R.id.configbuilder_simpleitem_checkboxenabled);
-                holder.checkboxVisible = (CheckBox) convertView.findViewById(R.id.configbuilder_simpleitem_checkboxvisible);
-                convertView.setTag(holder);
+                holder.name = (TextView) view.findViewById(R.id.configbuilder_simpleitem_name);
+                holder.checkboxEnabled = (CheckBox) view.findViewById(R.id.configbuilder_simpleitem_checkboxenabled);
+                holder.checkboxVisible = (CheckBox) view.findViewById(R.id.configbuilder_simpleitem_checkboxvisible);
+                holder.settings = (ImageView) view.findViewById(R.id.configbuilder_simpleitem_settings);
+
+                if (plugin.isEnabled(type) && plugin.getPreferencesId() != -1)
+                    holder.settings.setVisibility(View.VISIBLE);
+                else
+                    holder.settings.setVisibility(View.INVISIBLE);
+
+                view.setTag(holder);
 
                 holder.checkboxEnabled.setOnClickListener(new View.OnClickListener() {
                     public void onClick(View v) {
@@ -173,8 +239,10 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
                         plugin.setFragmentVisible(type, cb.isChecked());
                         onEnabledCategoryChanged(plugin, type);
                         configBuilderPlugin.storeSettings();
-                        MainApp.bus().post(new EventRefreshGui(true));
+                        MainApp.bus().post(new EventRefreshGui());
+                        MainApp.bus().post(new EventConfigBuilderChange());
                         getPlugin().logPluginStatus();
+                        Answers.getInstance().logCustom(new CustomEvent("ConfigurationChange"));
                     }
                 });
 
@@ -184,21 +252,52 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
                         PluginBase plugin = (PluginBase) cb.getTag();
                         plugin.setFragmentVisible(type, cb.isChecked());
                         configBuilderPlugin.storeSettings();
-                        MainApp.bus().post(new EventRefreshGui(true));
+                        MainApp.bus().post(new EventRefreshGui());
                         getPlugin().logPluginStatus();
                     }
                 });
+
+                holder.settings.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        final PluginBase plugin = (PluginBase) v.getTag();
+                        PasswordProtection.QueryPassword(getContext(), R.string.settings_password, "settings_password", new Runnable() {
+                            @Override
+                            public void run() {
+                                Intent i = new Intent(getContext(), PreferencesActivity.class);
+                                i.putExtra("id", plugin.getPreferencesId());
+                                startActivity(i);
+                            }
+                        }, null);
+                    }
+                });
+
+                holder.name.setOnLongClickListener(new View.OnLongClickListener() {
+                    @Override
+                    public boolean onLongClick(View v) {
+                        final PluginBase plugin = (PluginBase) v.getTag();
+                        PasswordProtection.QueryPassword(getContext(), R.string.settings_password, "settings_password", new Runnable() {
+                            @Override
+                            public void run() {
+                                Intent i = new Intent(getContext(), PreferencesActivity.class);
+                                i.putExtra("id", plugin.getPreferencesId());
+                                startActivity(i);
+                            }
+                        }, null);
+                        return false;
+                    }
+                });
+
             } else {
-                holder = (PluginViewHolder) convertView.getTag();
+                holder = (PluginViewHolder) view.getTag();
             }
 
-            PluginBase plugin = pluginList.get(position);
             holder.name.setText(plugin.getName());
             holder.checkboxEnabled.setChecked(plugin.isEnabled(type));
             holder.checkboxVisible.setChecked(plugin.isVisibleInTabs(type));
             holder.name.setTag(plugin);
             holder.checkboxEnabled.setTag(plugin);
             holder.checkboxVisible.setTag(plugin);
+            holder.settings.setTag(plugin);
 
             if (!plugin.canBeHidden(type)) {
                 holder.checkboxEnabled.setEnabled(false);
@@ -209,8 +308,12 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
                 holder.checkboxVisible.setEnabled(false);
             }
 
+            if (!plugin.hasFragment()) {
+                holder.checkboxVisible.setVisibility(View.INVISIBLE);
+            }
+
             // Hide enabled control and force enabled plugin if there is only one plugin available
-            if (type == PluginBase.PUMP || type == PluginBase.TREATMENT || type == PluginBase.TEMPBASAL || type == PluginBase.PROFILE)
+            if (type == PluginBase.INSULIN || type == PluginBase.PUMP || type == PluginBase.TREATMENT || type == PluginBase.PROFILE || type == PluginBase.SENSITIVITY)
                 if (pluginList.size() < 2) {
                     holder.checkboxEnabled.setEnabled(false);
                     plugin.setFragmentEnabled(type, true);
@@ -241,7 +344,11 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
                 }
             }
 
-            return convertView;
+            if (plugin.isEnabled(type)) {
+                view.setBackgroundColor(MainApp.sResources.getColor(R.color.configBuilderSelectedBackground));
+            }
+
+            return view;
 
         }
 
@@ -256,6 +363,12 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
             case PluginBase.LOOP:
                 break;
             // Single selection allowed
+            case PluginBase.INSULIN:
+                pluginsInCategory = MainApp.getSpecificPluginsListByInterface(InsulinInterface.class);
+                break;
+            case PluginBase.SENSITIVITY:
+                pluginsInCategory = MainApp.getSpecificPluginsListByInterface(SensitivityInterface.class);
+                break;
             case PluginBase.APS:
                 pluginsInCategory = MainApp.getSpecificPluginsListByInterface(APSInterface.class);
                 break;
@@ -265,7 +378,6 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
             case PluginBase.BGSOURCE:
                 pluginsInCategory = MainApp.getSpecificPluginsListByInterface(BgSourceInterface.class);
                 break;
-            case PluginBase.TEMPBASAL:
             case PluginBase.TREATMENT:
             case PluginBase.PUMP:
                 pluginsInCategory = MainApp.getSpecificPluginsListByInterface(PumpInterface.class);
@@ -285,6 +397,10 @@ public class ConfigBuilderFragment extends Fragment implements FragmentBase {
             } else { // enable first plugin in list
                 if (type == PluginBase.PUMP)
                     MainApp.getSpecificPlugin(VirtualPumpPlugin.class).setFragmentEnabled(type, true);
+                else if (type == PluginBase.INSULIN)
+                    MainApp.getSpecificPlugin(InsulinFastactingPlugin.class).setFragmentEnabled(type, true);
+                else if (type == PluginBase.SENSITIVITY)
+                    MainApp.getSpecificPlugin(SensitivityOref0Plugin.class).setFragmentEnabled(type, true);
                 else if (type == PluginBase.PROFILE)
                     MainApp.getSpecificPlugin(NSProfilePlugin.class).setFragmentEnabled(type, true);
                 else

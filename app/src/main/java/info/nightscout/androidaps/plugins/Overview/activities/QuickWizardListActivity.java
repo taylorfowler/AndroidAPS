@@ -1,9 +1,9 @@
 package info.nightscout.androidaps.plugins.Overview.activities;
 
 import android.app.Activity;
+import android.os.Bundle;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AppCompatActivity;
-import android.os.Bundle;
 import android.support.v7.widget.CardView;
 import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
@@ -15,13 +15,11 @@ import android.widget.TextView;
 
 import com.squareup.otto.Subscribe;
 
-import java.text.SimpleDateFormat;
-
 import info.nightscout.androidaps.MainApp;
 import info.nightscout.androidaps.R;
+import info.nightscout.androidaps.data.QuickWizard;
 import info.nightscout.androidaps.plugins.Overview.Dialogs.EditQuickWizardDialog;
 import info.nightscout.androidaps.plugins.Overview.OverviewPlugin;
-import info.nightscout.androidaps.plugins.Overview.QuickWizard;
 import info.nightscout.androidaps.plugins.Overview.events.EventQuickWizardChange;
 import info.nightscout.utils.DateUtil;
 import info.nightscout.utils.DecimalFormatter;
@@ -124,7 +122,7 @@ public class QuickWizardListActivity extends AppCompatActivity implements View.O
         llm = new LinearLayoutManager(this);
         recyclerView.setLayoutManager(llm);
 
-        RecyclerViewAdapter adapter = new RecyclerViewAdapter(((OverviewPlugin) MainApp.getSpecificPlugin(OverviewPlugin.class)).quickWizard, getSupportFragmentManager());
+        RecyclerViewAdapter adapter = new RecyclerViewAdapter(MainApp.getSpecificPlugin(OverviewPlugin.class).quickWizard, getSupportFragmentManager());
         recyclerView.setAdapter(adapter);
 
         adButton = (Button) findViewById(R.id.overview_quickwizardactivity_add_button);
@@ -153,6 +151,7 @@ public class QuickWizardListActivity extends AppCompatActivity implements View.O
                 break;
         }
     }
+
     @Subscribe
     public void onStatusEvent(final EventQuickWizardChange ev) {
         updateGUI();
@@ -164,7 +163,7 @@ public class QuickWizardListActivity extends AppCompatActivity implements View.O
             activity.runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    RecyclerViewAdapter adapter = new RecyclerViewAdapter(((OverviewPlugin) MainApp.getSpecificPlugin(OverviewPlugin.class)).quickWizard, getSupportFragmentManager());
+                    RecyclerViewAdapter adapter = new RecyclerViewAdapter(MainApp.getSpecificPlugin(OverviewPlugin.class).quickWizard, getSupportFragmentManager());
                     recyclerView.swapAdapter(adapter, false);
                 }
             });

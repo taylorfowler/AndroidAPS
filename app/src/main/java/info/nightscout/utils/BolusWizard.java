@@ -1,13 +1,12 @@
 package info.nightscout.utils;
 
-import org.json.JSONObject;
-
 import info.nightscout.androidaps.MainApp;
-import info.nightscout.androidaps.R;
-import info.nightscout.androidaps.interfaces.TempBasalsInterface;
+import info.nightscout.androidaps.data.GlucoseStatus;
+import info.nightscout.androidaps.data.IobTotal;
+import info.nightscout.androidaps.data.Profile;
+import info.nightscout.androidaps.db.TempTarget;
 import info.nightscout.androidaps.interfaces.TreatmentsInterface;
-import info.nightscout.androidaps.plugins.OpenAPSMA.IobTotal;
-import info.nightscout.client.data.NSProfile;
+import info.nightscout.androidaps.plugins.ConfigBuilder.ConfigBuilderPlugin;
 
 /**
  * Created by mike on 11.10.2016.
@@ -15,64 +14,90 @@ import info.nightscout.client.data.NSProfile;
 
 public class BolusWizard {
     // Inputs
-    JSONObject specificProfile = null;
-    Integer carbs = 0;
-    Double bg = 0d;
-    Double correction;
-    Boolean includeBolusIOB = true;
-    Boolean includeBasalIOB = true;
+    private Profile specificProfile = null;
+    private TempTarget tempTarget;
+    public Integer carbs = 0;
+    private Double bg = 0d;
+    private Double correction;
+    private Boolean includeBolusIOB = true;
+    private Boolean includeBasalIOB = true;
+    public Boolean superBolus = false;
+    private Boolean trend = false;
 
     // Intermediate
     public Double sens = 0d;
     public Double ic = 0d;
 
+    public GlucoseStatus glucoseStatus;
+
     public Double targetBGLow = 0d;
     public Double targetBGHigh = 0d;
     public Double bgDiff = 0d;
-
-    IobTotal bolusIob;
-    IobTotal basalIob;
 
     public Double insulinFromBG = 0d;
     public Double insulinFromCarbs = 0d;
     public Double insulingFromBolusIOB = 0d;
     public Double insulingFromBasalsIOB = 0d;
     public Double insulinFromCorrection = 0d;
+    public Double insulinFromSuperBolus = 0d;
+    public Double insulinFromCOB = 0d;
+    public Double insulinFromTrend = 0d;
 
     // Result
     public Double calculatedTotalInsulin = 0d;
+    public Double totalBeforePercentageAdjustment = 0d;
     public Double carbsEquivalent = 0d;
 
-    public Double doCalc(JSONObject specificProfile, Integer carbs, Double bg, Double correction, Boolean includeBolusIOB, Boolean includeBasalIOB) {
+    public Double doCalc(Profile specificProfile, TempTarget tempTarget, Integer carbs, Double cob, Double bg, Double correction, Boolean includeBolusIOB, Boolean includeBasalIOB, Boolean superBolus, Boolean trend) {
+        return doCalc(specificProfile, tempTarget, carbs, cob, bg, correction, 100d, includeBolusIOB, includeBasalIOB, superBolus, trend);
+    }
+
+    public Double doCalc(Profile specificProfile, TempTarget tempTarget, Integer carbs, Double cob, Double bg, Double correction, double percentageCorrection, Boolean includeBolusIOB, Boolean includeBasalIOB, Boolean superBolus, Boolean trend) {
         this.specificProfile = specificProfile;
+        this.tempTarget = tempTarget;
         this.carbs = carbs;
         this.bg = bg;
         this.correction = correction;
-
-        NSProfile profile = MainApp.getConfigBuilder().getActiveProfile().getProfile();
+        this.includeBolusIOB = includeBolusIOB;
+        this.includeBasalIOB = includeBasalIOB;
+        this.superBolus = superBolus;
+        this.trend = trend;
 
         // Insulin from BG
-        sens = profile.getIsf(specificProfile, NSProfile.secondsFromMidnight());
-        targetBGLow = profile.getTargetLow(specificProfile, NSProfile.secondsFromMidnight());
-        targetBGHigh = profile.getTargetHigh(specificProfile, NSProfile.secondsFromMidnight());
-        if (bg <= targetBGLow) {
+        sens = specificProfile.getIsf();
+        targetBGLow = specificProfile.getTargetLow();
+        targetBGHigh = specificProfile.getTargetHigh();
+        if (tempTarget != null) {
+            targetBGLow = Profile.fromMgdlToUnits(tempTarget.low, specificProfile.getUnits());
+            targetBGHigh = Profile.fromMgdlToUnits(tempTarget.high, specificProfile.getUnits());
+        }
+        if (bg >= targetBGLow && bg <= targetBGHigh) {
+            bgDiff = 0d;
+        } else if (bg <= targetBGLow) {
             bgDiff = bg - targetBGLow;
         } else {
             bgDiff = bg - targetBGHigh;
         }
         insulinFromBG = bg != 0d ? bgDiff / sens : 0d;
 
+        // Insulin from 15 min trend
+        glucoseStatus = GlucoseStatus.getGlucoseStatusData();
+        if (glucoseStatus != null && trend) {
+            insulinFromTrend = (Profile.fromMgdlToUnits(glucoseStatus.short_avgdelta, specificProfile.getUnits()) * 3) / sens;
+        }
+
         // Insuling from carbs
-        ic = profile.getIc(specificProfile, NSProfile.secondsFromMidnight());
+        ic = specificProfile.getIc();
         insulinFromCarbs = carbs / ic;
+        insulinFromCOB = cob / ic;
 
         // Insulin from IOB
-        TreatmentsInterface treatments = MainApp.getConfigBuilder().getActiveTreatments();
-        TempBasalsInterface tempBasals = MainApp.getConfigBuilder().getActiveTempBasals();
-        treatments.updateTotalIOB();
-        tempBasals.updateTotalIOB();
-        bolusIob = treatments.getLastCalculation();
-        basalIob = tempBasals.getLastCalculation();
+        // IOB calculation
+        TreatmentsInterface treatments = MainApp.getConfigBuilder();
+        treatments.updateTotalIOBTreatments();
+        IobTotal bolusIob = treatments.getLastCalculationTreatments().round();
+        treatments.updateTotalIOBTempBasals();
+        IobTotal basalIob = treatments.getLastCalculationTempBasals().round();
 
         insulingFromBolusIOB = includeBolusIOB ? -bolusIob.iob : 0d;
         insulingFromBasalsIOB = includeBasalIOB ? -basalIob.basaliob : 0d;
@@ -80,15 +105,30 @@ public class BolusWizard {
         // Insulin from correction
         insulinFromCorrection = correction;
 
+        // Insulin from superbolus for 2h. Get basal rate now and after 1h
+        if (superBolus) {
+            insulinFromSuperBolus = specificProfile.getBasal();
+            long timeAfter1h = System.currentTimeMillis();
+            timeAfter1h += 60L * 60 * 1000;
+            insulinFromSuperBolus += specificProfile.getBasal(timeAfter1h);
+        }
+
         // Total
-        calculatedTotalInsulin = insulinFromBG + insulinFromCarbs + insulingFromBolusIOB + insulingFromBasalsIOB + insulinFromCorrection;
+        calculatedTotalInsulin = insulinFromBG + insulinFromTrend + insulinFromCarbs + insulingFromBolusIOB + insulingFromBasalsIOB + insulinFromCorrection + insulinFromSuperBolus + insulinFromCOB;
+
+        // Percentage adjustment
+        totalBeforePercentageAdjustment = calculatedTotalInsulin;
+        if (calculatedTotalInsulin > 0) {
+            calculatedTotalInsulin = calculatedTotalInsulin * percentageCorrection / 100d;
+        }
 
         if (calculatedTotalInsulin < 0) {
             carbsEquivalent = -calculatedTotalInsulin * ic;
             calculatedTotalInsulin = 0d;
         }
 
-        calculatedTotalInsulin = Round.roundTo(calculatedTotalInsulin, 0.05d);
+        double bolusStep = ConfigBuilderPlugin.getActivePump().getPumpDescription().bolusStep;
+        calculatedTotalInsulin = Round.roundTo(calculatedTotalInsulin, bolusStep);
 
         return calculatedTotalInsulin;
     }

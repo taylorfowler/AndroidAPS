@@ -2,47 +2,38 @@ package info.nightscout.androidaps.plugins.Actions.dialogs;
 
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.HandlerThread;
 import android.support.v4.app.DialogFragment;
 import android.support.v7.app.AlertDialog;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
-import android.widget.EditText;
-import android.widget.RadioButton;
+
+import com.crashlytics.android.answers.Answers;
+import com.crashlytics.android.answers.CustomEvent;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.text.DecimalFormat;
 
 import info.nightscout.androidaps.Constants;
 import info.nightscout.androidaps.MainApp;
 import info.nightscout.androidaps.R;
-import info.nightscout.androidaps.data.PumpEnactResult;
-import info.nightscout.androidaps.interfaces.PumpInterface;
-import info.nightscout.utils.PlusMinusEditText;
+import info.nightscout.androidaps.plugins.ConfigBuilder.ConfigBuilderPlugin;
+import info.nightscout.androidaps.plugins.Overview.Dialogs.ErrorHelperActivity;
+import info.nightscout.androidaps.queue.Callback;
+import info.nightscout.utils.NumberPicker;
 import info.nightscout.utils.SafeParse;
 
 public class NewExtendedBolusDialog extends DialogFragment implements View.OnClickListener {
+    private static Logger log = LoggerFactory.getLogger(NewExtendedBolusDialog.class);
 
-    Button okButton;
-    EditText insulinEdit;
-    RadioButton h05Radio;
-    RadioButton h10Radio;
-    RadioButton h20Radio;
-    RadioButton h30Radio;
-    RadioButton h40Radio;
-
-    PlusMinusEditText editInsulin;
-
-    Handler mHandler;
-    public static HandlerThread mHandlerThread;
+    NumberPicker editInsulin;
+    NumberPicker editDuration;
 
     public NewExtendedBolusDialog() {
-        mHandlerThread = new HandlerThread(NewExtendedBolusDialog.class.getSimpleName());
-        mHandlerThread.start();
-        this.mHandler = new Handler(mHandlerThread.getLooper());
     }
 
     @Override
@@ -51,39 +42,31 @@ public class NewExtendedBolusDialog extends DialogFragment implements View.OnCli
         getDialog().setTitle(getString(R.string.overview_extendedbolus_button));
 
         View view = inflater.inflate(R.layout.overview_newextendedbolus_dialog, container, false);
-        okButton = (Button) view.findViewById(R.id.overview_newextendedbolus_okbutton);
-        insulinEdit = (EditText) view.findViewById(R.id.overview_newextendedbolus_insulin);
-        h05Radio = (RadioButton) view.findViewById(R.id.overview_newextendedbolus_05h);
-        h10Radio = (RadioButton) view.findViewById(R.id.overview_newextendedbolus_1h);
-        h20Radio = (RadioButton) view.findViewById(R.id.overview_newextendedbolus_2h);
-        h30Radio = (RadioButton) view.findViewById(R.id.overview_newextendedbolus_3h);
-        h40Radio = (RadioButton) view.findViewById(R.id.overview_newextendedbolus_4h);
 
         Double maxInsulin = MainApp.getConfigBuilder().applyBolusConstraints(Constants.bolusOnlyForCheckLimit);
-        editInsulin = new PlusMinusEditText(view, R.id.overview_newextendedbolus_insulin, R.id.overview_newextendedbolus_insulin_plus, R.id.overview_newextendedbolus_insulin_minus, 0d, 0d, maxInsulin, 0.1d, new DecimalFormat("0.00"), false);
+        editInsulin = (NumberPicker) view.findViewById(R.id.overview_newextendedbolus_insulin);
+        editInsulin.setParams(0d, 0d, maxInsulin, 0.1d, new DecimalFormat("0.00"), false);
 
-        okButton.setOnClickListener(this);
+        double extendedDurationStep = ConfigBuilderPlugin.getActivePump().getPumpDescription().extendedBolusDurationStep;
+        double extendedMaxDuration = ConfigBuilderPlugin.getActivePump().getPumpDescription().extendedBolusMaxDuration;
+        editDuration = (NumberPicker) view.findViewById(R.id.overview_newextendedbolus_duration);
+        editDuration.setParams(extendedDurationStep, extendedDurationStep, extendedMaxDuration, extendedDurationStep, new DecimalFormat("0"), false);
+
+        view.findViewById(R.id.ok).setOnClickListener(this);
+        view.findViewById(R.id.cancel).setOnClickListener(this);
+
+        setCancelable(true);
+        getDialog().setCanceledOnTouchOutside(false);
         return view;
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (getDialog() != null)
-            getDialog().getWindow().setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     @Override
     public void onClick(View view) {
         switch (view.getId()) {
-            case R.id.overview_newextendedbolus_okbutton:
+            case R.id.ok:
                 try {
-                    Double insulin = SafeParse.stringToDouble(insulinEdit.getText().toString());
-                    int durationInMinutes = 30;
-                    if (h10Radio.isChecked()) durationInMinutes = 60;
-                    if (h20Radio.isChecked()) durationInMinutes = 120;
-                    if (h30Radio.isChecked()) durationInMinutes = 180;
-                    if (h40Radio.isChecked()) durationInMinutes = 240;
+                    Double insulin = SafeParse.stringToDouble(editInsulin.getText());
+                    int durationInMinutes = SafeParse.stringToInt(editDuration.getText());
 
                     String confirmMessage = getString(R.string.setextendedbolusquestion);
 
@@ -103,20 +86,20 @@ public class NewExtendedBolusDialog extends DialogFragment implements View.OnCli
                     builder.setMessage(confirmMessage);
                     builder.setPositiveButton(getString(R.string.ok), new DialogInterface.OnClickListener() {
                         public void onClick(DialogInterface dialog, int id) {
-                            final PumpInterface pump = MainApp.getConfigBuilder();
-                            mHandler.post(new Runnable() {
+                            ConfigBuilderPlugin.getCommandQueue().extendedBolus(finalInsulin, finalDurationInMinutes, new Callback() {
                                 @Override
                                 public void run() {
-                                    PumpEnactResult result = pump.setExtendedBolus(finalInsulin, finalDurationInMinutes);
                                     if (!result.success) {
-                                        AlertDialog.Builder builder = new AlertDialog.Builder(context);
-                                        builder.setTitle(context.getString(R.string.treatmentdeliveryerror));
-                                        builder.setMessage(result.comment);
-                                        builder.setPositiveButton(context.getString(R.string.ok), null);
-                                        builder.show();
+                                        Intent i = new Intent(MainApp.instance(), ErrorHelperActivity.class);
+                                        i.putExtra("soundid", R.raw.boluserror);
+                                        i.putExtra("status", result.comment);
+                                        i.putExtra("title", MainApp.sResources.getString(R.string.treatmentdeliveryerror));
+                                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        MainApp.instance().startActivity(i);
                                     }
                                 }
                             });
+                            Answers.getInstance().logCustom(new CustomEvent("ExtendedBolus"));
                         }
                     });
                     builder.setNegativeButton(getString(R.string.cancel), null);
@@ -124,8 +107,12 @@ public class NewExtendedBolusDialog extends DialogFragment implements View.OnCli
                     dismiss();
 
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    log.error("Unhandled exception", e);
                 }
+                break;
+            case R.id.cancel:
+                dismiss();
+                break;
         }
     }
 

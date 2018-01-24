@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+
+        <color name="wl_blue">#2878ff</color>
+        <color name="wl_gray">#c1c1c1</color>
+        <color name="text_color">#434343</color>
+    <color name="cardObjectiveText">#779ECB</color>
+
+
     <!-- light colors -->
     <color name="light_bigchart_time">@color/black</color>
     <color name="light_bigchart_status">@color/black</color>
@@ -54,6 +61,7 @@
     <color name="grey_50">#FAFAFA</color>
     <color name="grey_300">#E0E0E0</color>
     <color name="grey_500">#9E9E9E</color>
+    <color name="grey_steampunk">#333333</color>
     <!-- Grey -->
 
     <!-- Blue Grey -->

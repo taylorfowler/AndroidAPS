@@ -10,6 +10,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import com.crashlytics.android.Crashlytics;
 import com.squareup.otto.Subscribe;
 
 import org.slf4j.Logger;
@@ -18,26 +19,16 @@ import org.slf4j.LoggerFactory;
 import java.util.Collections;
 import java.util.Comparator;
 
-import info.nightscout.androidaps.MainApp;
 import info.nightscout.androidaps.R;
+import info.nightscout.androidaps.plugins.Common.SubscriberFragment;
 import info.nightscout.androidaps.plugins.SmsCommunicator.events.EventSmsCommunicatorUpdateGui;
 import info.nightscout.utils.DateUtil;
 
 /**
  * A simple {@link Fragment} subclass.
  */
-public class SmsCommunicatorFragment extends Fragment {
+public class SmsCommunicatorFragment extends SubscriberFragment {
     private static Logger log = LoggerFactory.getLogger(SmsCommunicatorFragment.class);
-
-    private static SmsCommunicatorPlugin smsCommunicatorPlugin;
-
-    public static SmsCommunicatorPlugin getPlugin() {
-
-        if(smsCommunicatorPlugin==null){
-            smsCommunicatorPlugin = new SmsCommunicatorPlugin();
-        }
-        return smsCommunicatorPlugin;
-    }
 
     TextView logView;
 
@@ -48,24 +39,18 @@ public class SmsCommunicatorFragment extends Fragment {
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
                              Bundle savedInstanceState) {
-        View view = inflater.inflate(R.layout.smscommunicator_fragment, container, false);
+        try {
+            View view = inflater.inflate(R.layout.smscommunicator_fragment, container, false);
 
-        logView = (TextView) view.findViewById(R.id.smscommunicator_log);
+            logView = (TextView) view.findViewById(R.id.smscommunicator_log);
 
-        updateGUI();
-        return view;
-    }
+            updateGUI();
+            return view;
+        } catch (Exception e) {
+            Crashlytics.logException(e);
+        }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        MainApp.bus().unregister(this);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        MainApp.bus().register(this);
+        return null;
     }
 
     @Subscribe
@@ -74,7 +59,8 @@ public class SmsCommunicatorFragment extends Fragment {
     }
 
 
-    private void updateGUI() {
+    @Override
+    protected void updateGUI() {
         Activity activity = getActivity();
         if (activity != null)
             activity.runOnUiThread(new Runnable() {
@@ -85,14 +71,14 @@ public class SmsCommunicatorFragment extends Fragment {
                             return (int) (object1.date.getTime() - object2.date.getTime());
                         }
                     }
-                    Collections.sort(getPlugin().messages, new CustomComparator());
+                    Collections.sort(SmsCommunicatorPlugin.getPlugin().messages, new CustomComparator());
                     int messagesToShow = 40;
 
-                    int start = Math.max(0, getPlugin().messages.size() - messagesToShow);
+                    int start = Math.max(0, SmsCommunicatorPlugin.getPlugin().messages.size() - messagesToShow);
 
                     String logText = "";
-                    for (int x = start; x < getPlugin().messages.size(); x++) {
-                        SmsCommunicatorPlugin.Sms sms = getPlugin().messages.get(x);
+                    for (int x = start; x < SmsCommunicatorPlugin.getPlugin().messages.size(); x++) {
+                        SmsCommunicatorPlugin.Sms sms = SmsCommunicatorPlugin.getPlugin().messages.get(x);
                         if (sms.received) {
                             logText += DateUtil.timeString(sms.date) + " &lt;&lt;&lt; " + (sms.processed ? "● " : "○ ") + sms.phoneNumber + " <b>" + sms.text + "</b><br>";
                         } else if (sms.sent) {
